@@ -30,6 +30,10 @@ class AmazonGamesPlugin:
         from .amazon_games import launch_game
         return launch_game(appid)
 
+    def uninstall_game(self, appid):
+        from .amazon_games import uninstall_game
+        return uninstall_game(appid)
+
     def rescrape(self, appid):
         from datetime import date
         from database import get_db
@@ -48,13 +52,15 @@ class AmazonGamesPlugin:
 
     def js_api(self):
         return {
-            'uninstall_url':  None,
-            'scrape_url':     '/api/amazon_games/rescrape/{appid}',
-            'scrape_method':  'POST',
-            'store_url':      'https://gaming.amazon.com/home',
-            'store_label':    'View on Amazon Games ↗',
-            'appid_label':    'Amazon Game ID:',
-            'sync_label':     'Sync Amazon Library',
+            'uninstall_url':     '/api/amazon_games/uninstall/{appid}',
+            'uninstall_confirm': 'Uninstall this game and delete its files?',
+            'scrape_url':        '/api/amazon_games/rescrape/{appid}',
+            'scrape_method':     'POST',
+            'store_url':         'https://gaming.amazon.com/home',
+            'store_label':       'View on Amazon Games ↗',
+            'appid_label':       'Amazon Game ID:',
+            'sync_label':        'Sync Amazon Library',
+            'install_poller':    'amazonInstallPoll',
         }
 
     def manage_ui(self):
@@ -90,56 +96,24 @@ class AmazonGamesPlugin:
                         'title': 'Connect Amazon Games',
                         'url_endpoint': '/api/amazon_games/auth-url',
                         'callback_endpoint': '/api/amazon_games/connect',
-                        'redirect_pattern': 'luna.amazon.com',
+                        # amazon.com/ap/signin (no www) redirects here on success with
+                        # openid.oa2.authorization_code in the query string --
+                        # deliberately checked for by name (not just "landed on
+                        # www.amazon.com") so this can't fire on an incidental visit to
+                        # the amazon.com homepage before login actually completes.
+                        'redirect_pattern': 'www.amazon.com',
                         'code_js': (
-                            "(function(){"
-                            # Read at-main from document.cookie (not HttpOnly for Amazon JS apps)
-                            "var atMain='';"
-                            "var csrf='';"
-                            "var ck=document.cookie.split(';');"
-                            "for(var j=0;j<ck.length;j++){"
-                            "var p=ck[j].trim();"
-                            "if(p.indexOf('at-main=')===0)atMain=p.slice(8);"
-                            "if(p.indexOf('csrf1=')===0)csrf=p.slice(6);"
-                            "if(p.indexOf('csrfToken=')===0)csrf=p.slice(10);"
-                            "}"
-                            "if(!atMain)return '';"
-                            # Try CSRF from window variables Amazon SPAs use
-                            "if(!csrf){"
-                            "try{"
-                            "var keys=['__anti_csrftoken_a2z','anti_csrftoken_a2z','__CSRF_TOKEN','csrfToken'];"
-                            "for(var i=0;i<keys.length;i++){if(window[keys[i]]){csrf=window[keys[i]];break;}}"
-                            "}catch(e){}"
-                            "}"
-                            # Try meta tag
-                            "if(!csrf){"
-                            "try{"
-                            "var m=document.querySelector('meta[name=\"anti-csrftoken-a2z\"],meta[name=\"csrf-token\"]');"
-                            "if(m)csrf=m.getAttribute('content')||'';"
-                            "}catch(e){}"
-                            "}"
-                            "return JSON.stringify({token:atMain,csrf:csrf});"
-                            "})()"
+                            "window.location.href.indexOf('openid.oa2.authorization_code')>=0 "
+                            "? window.location.href : ''"
                         ),
                         'instructions': [
-                            'The popup opens gaming.amazon.com. If you are already signed in to Amazon, '
-                            'PlayDate will connect automatically.',
-                            'If the popup fails to connect: sign in at gaming.amazon.com in your regular browser, '
-                            'open DevTools (F12) → Application → Cookies → amazon.com, '
-                            'copy the value of <code>at-main</code>, and paste it below.',
+                            'Click <strong>Open Amazon Login</strong> and sign in to your Amazon account.',
+                            'The window closes itself once sign-in completes.',
+                            'If it gets stuck: sign in at '
+                            '<a href="https://www.amazon.com" target="_blank">amazon.com</a> in your regular '
+                            'browser first, then click Open again.',
                         ],
-                        'input_placeholder': 'Paste your at-main cookie value here…',
-                        'open_label': 'Open Amazon Games',
-                        'submit_label': 'Connect',
-                    }},
-                    {'type': 'button', 'label': 'Paste at-main manually', 'variant': 'muted', 'action': {
-                        'type': 'oauth_paste',
-                        'title': 'Connect Amazon Games',
-                        'url_endpoint': '/api/amazon_games/auth-url',
-                        'callback_endpoint': '/api/amazon_games/connect',
-                        'instructions': [],
-                        'input_placeholder': '',
-                        'open_label': '',
+                        'open_label': 'Open Amazon Login',
                         'submit_label': 'Connect',
                     }},
                 ] if not nile else [
@@ -162,11 +136,27 @@ class AmazonGamesPlugin:
             },
         })
 
+        sections.append({
+            'title': 'Games Folder',
+            'items': [
+                {'type': 'text', 'content': 'Where PlayDate installs Amazon games.'},
+                {'type': 'info_endpoint', 'endpoint': '/api/amazon_games/games-dir-info'},
+                {'type': 'buttons', 'items': [
+                    {'label': 'Set Folder…', 'action': {'type': 'call', 'fn': 'amazonGamesPickFolder'}},
+                    {'label': 'Open Folder', 'action': {'type': 'call', 'fn': 'amazonGamesOpenFolder'}},
+                ]},
+                {'type': 'status_output', 'key': 'folder'},
+            ],
+        })
+
         return {'sections': sections}
 
     def fragments(self):
         return {
-            'tools_scripts': 'amazon_games_tools_scripts.html',
+            'base_head_styles':  'amazon_games_base_head_styles.html',
+            'base_nav_items':    'amazon_games_base_nav_items.html',
+            'base_body_scripts': 'amazon_games_base_scripts.html',
+            'tools_scripts':     'amazon_games_tools_scripts.html',
         }
 
 

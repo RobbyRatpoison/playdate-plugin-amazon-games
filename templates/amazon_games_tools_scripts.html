@@ -29,3 +29,60 @@ function _amazonGamesPoll(statusEl) {
             .catch(function() { clearInterval(iv); });
     }, 1500);
 }
+
+// ── Games folder ─────────────────────────────────────────────────────────────
+
+var _amazonGamesFolderBusy = false;
+
+function amazonGamesPickFolder() {
+    if (_amazonGamesFolderBusy) return;
+    _amazonGamesFolderBusy = true;
+    setTimeout(function() { _amazonGamesFolderBusy = false; }, 300);
+    var statusEl = document.getElementById('amazon_games-manage-status-folder');
+
+    function _pick() {
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.pick_folder) {
+            return window.pywebview.api.pick_folder();
+        }
+        return Promise.resolve(null);
+    }
+
+    _pick().then(function(path) {
+        if (!path) return;
+        if (statusEl) statusEl.textContent = 'Saving…';
+        fetch('/api/amazon_games/games-dir', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({path: path}),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.error) {
+                if (statusEl) statusEl.textContent = 'Error: ' + d.error;
+                return;
+            }
+            if (statusEl) statusEl.textContent = '';
+            _amazonGamesRefreshFolderInfo();
+        })
+        .catch(function(e) {
+            if (statusEl) statusEl.textContent = 'Error: ' + e.message;
+        });
+    });
+}
+
+function amazonGamesOpenFolder() {
+    fetch('/api/amazon_games/open-folder', { method: 'POST' }).catch(function() {});
+}
+
+function _amazonGamesRefreshFolderInfo() {
+    fetch('/api/amazon_games/games-dir-info')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            var el = document.getElementById('amazon_games-manage-info-0');
+            if (el) el.textContent = d.text || '';
+        })
+        .catch(function() {});
+}
+
+if (!_manageOnOpen['amazon_games']) _manageOnOpen['amazon_games'] = [];
+_manageOnOpen['amazon_games'].push(_amazonGamesRefreshFolderInfo);

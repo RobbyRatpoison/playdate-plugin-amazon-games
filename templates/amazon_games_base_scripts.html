@@ -1,0 +1,85 @@
+// ── Amazon Games install progress (hamburger button) ──────────────────
+let _amazonInstallPoller = null;
+let _amazonInstallAppid  = null;
+
+function _resetAmazonInstallBtn() {
+    const btn = document.getElementById('amazon-games-install-btn');
+    btn.style.display    = 'none';
+    btn.style.background = '';
+    btn.style.color      = '';
+    btn.disabled         = false;
+    btn.innerText        = 'AMAZON: INSTALLING...';
+    _amazonInstallAppid  = null;
+}
+
+function _updateAmazonInstallBtn(d) {
+    const btn  = document.getElementById('amazon-games-install-btn');
+    const name = d.name || 'Amazon Game';
+    if (d.total > 0) {
+        const pct  = Math.round(d.done / d.total * 100);
+        const done = (d.done  / 1e6).toFixed(0);
+        const tot  = (d.total / 1e6).toFixed(0);
+        btn.innerText        = `CANCEL  ${name}  [${done}/${tot} MB]  ${pct}%`;
+        btn.style.background = `linear-gradient(to right, rgba(102,192,244,0.18) ${pct}%, transparent ${pct}%)`;
+    } else {
+        btn.innerText        = `CANCEL  ${name}  —  starting…`;
+        btn.style.background = '';
+    }
+}
+
+function amazonInstallPoll(appid) {
+    _amazonInstallAppid = appid;
+    const btn = document.getElementById('amazon-games-install-btn');
+    btn.style.display = 'block';
+    btn.disabled      = false;
+    if (_amazonInstallPoller) clearInterval(_amazonInstallPoller);
+    _amazonInstallPoller = setInterval(async () => {
+        try {
+            const r = await fetch(`/api/amazon_games/install-status/${appid}`);
+            const d = await r.json();
+            if (d.status === 'running') {
+                _updateAmazonInstallBtn(d);
+            } else {
+                clearInterval(_amazonInstallPoller);
+                _amazonInstallPoller = null;
+                if (d.status === 'success') {
+                    btn.innerText        = `✔ ${d.name || 'Game'} installed`;
+                    btn.style.background = '';
+                    btn.style.color      = 'var(--accent-positive)';
+                    setTimeout(() => { _resetAmazonInstallBtn(); location.reload(); }, 2000);
+                } else if (d.status === 'cancelled') {
+                    btn.innerText        = 'Install cancelled';
+                    btn.style.background = '';
+                    btn.style.color      = 'var(--text-secondary)';
+                    if (window._inputMgr) window._inputMgr.clearSuppression();
+                    setTimeout(() => _resetAmazonInstallBtn(), 2000);
+                } else {
+                    btn.innerText        = `✘ Install failed — ${d.message || ''}`;
+                    btn.style.background = '';
+                    btn.style.color      = 'var(--color-danger)';
+                    if (window._inputMgr) window._inputMgr.clearSuppression();
+                    setTimeout(() => _resetAmazonInstallBtn(), 4000);
+                }
+            }
+        } catch (_) {}
+    }, 2000);
+}
+
+document.getElementById('amazon-games-install-btn').addEventListener('click', async () => {
+    if (!_amazonInstallAppid) return;
+    const btn    = document.getElementById('amazon-games-install-btn');
+    btn.innerText = 'Cancelling…';
+    btn.disabled  = true;
+    await fetch(`/api/amazon_games/install/${_amazonInstallAppid}/cancel`, { method: 'POST' });
+});
+
+// Resume tracking any in-progress install across page navigations
+(async () => {
+    try {
+        const r = await fetch('/api/amazon_games/active-install');
+        const d = await r.json();
+        if (d.appid !== null && d.appid !== undefined) {
+            amazonInstallPoll(d.appid);
+        }
+    } catch (_) {}
+})();
