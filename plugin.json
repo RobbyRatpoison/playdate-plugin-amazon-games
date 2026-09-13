@@ -1,7 +1,7 @@
 {
     "id": "amazon_games",
     "name": "Amazon Games",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "min_core_version": "1.10.2",
     "platform": "amazon_games",
     "author": "RobbyRatpoison",

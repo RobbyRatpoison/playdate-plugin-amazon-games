@@ -15,9 +15,13 @@ class AmazonGamesPlugin:
         log.info('Amazon Games plugin registered')
 
     def on_startup(self):
-        from .amazon_games import nile_detected, find_nile_library
+        from .amazon_games import nile_detected, find_nile_library, resync_installed
         if nile_detected():
             log.info(f'Amazon Games: Nile library detected at {find_nile_library()}')
+        try:
+            resync_installed()
+        except Exception as e:
+            log.warning(f'Amazon Games resync_installed at startup failed: {e}')
 
     def on_shutdown(self):
         pass
@@ -33,6 +37,10 @@ class AmazonGamesPlugin:
     def uninstall_game(self, appid):
         from .amazon_games import uninstall_game
         return uninstall_game(appid)
+
+    def resync_installed(self):
+        from .amazon_games import resync_installed
+        resync_installed()
 
     def rescrape(self, appid):
         from datetime import date

@@ -902,3 +902,56 @@ def uninstall_game(appid):
                       platform_executable=None, runner_path=None, wine_prefix=None)
     log.info('Amazon: uninstalled %r', row['name'])
     return {'status': 'success'}
+
+
+# ── Install-status resync ────────────────────────────────────────────────────
+
+def _nile_installed_ids():
+    """Set of Amazon game ids Nile/Heroic reports as installed, or empty."""
+    nile_inst = find_nile_installed()
+    if not nile_inst:
+        return set()
+    try:
+        with open(nile_inst, 'r', encoding='utf-8') as f:
+            raw = json.load(f)
+    except Exception as e:
+        log.warning('Amazon: could not read Nile installed.json: %s', e)
+        return set()
+    if isinstance(raw, list):
+        return {str(g.get('id', '')) for g in raw if g.get('id')}
+    if isinstance(raw, dict):
+        return {str(k) for k in raw}
+    return set()
+
+
+def resync_installed():
+    """Re-check installed-flag/install_path for every Amazon game. Called at
+    plugin startup and after bulk_rescrape_games()/a backup restore.
+
+    Amazon has no shared launcher prefix -- each game is a native per-title
+    install under the games folder marked by its own fuel.json descriptor --
+    so this is a straight per-game disk check (plus Nile/Heroic's
+    installed.json for games installed through Heroic rather than PlayDate).
+    A PlayDate-managed install whose folder has since been deleted gets its
+    stale install_path cleared too."""
+    nile_ids = _nile_installed_ids()
+    db = get_db()
+    try:
+        rows = db.execute(
+            "SELECT appid, platform_id, install_path, installed FROM games WHERE platform='amazon_games'"
+        ).fetchall()
+        for row in rows:
+            path = row['install_path'] or ''
+            if path and os.path.isdir(path) and os.path.isfile(os.path.join(path, 'fuel.json')):
+                new_flag, new_path = 1, path
+            elif path:
+                # PlayDate installed it here once; the folder is gone now.
+                new_flag, new_path = 0, None
+            elif str(row['platform_id']) in nile_ids:
+                new_flag, new_path = 1, path or None
+            else:
+                new_flag, new_path = 0, path or None
+            if bool(row['installed']) != bool(new_flag) or (row['install_path'] or None) != new_path:
+                update_game_data(row['appid'], installed=new_flag, install_path=new_path)
+    finally:
+        db.close()
