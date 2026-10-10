@@ -32,10 +32,16 @@ def disconnect():
 
 @bp.route('/status')
 def status():
-    from .amazon_games import is_connected, get_username, nile_detected
+    import plugins
+    from .amazon_games import is_connected, get_username, nile_detected, check_connection
     connected = is_connected()
+    expired   = False
+    verify    = getattr(plugins, 'verify_connection', None)  # absent on older cores
+    if connected and verify and verify('amazon_games', check_connection) is False:
+        connected, expired = False, True
     return jsonify({
         'connected': connected,
+        'expired':   expired,
         'username':  get_username() if connected else None,
         'nile':      nile_detected(),
     })

@@ -273,6 +273,33 @@ def _get_valid_access_token():
     return cfg['access_token']
 
 
+def check_connection():
+    """True if Amazon still accepts the saved login, False if the refresh token was
+    rejected, None if we couldn't tell. A nile-only setup (no PlayDate login) is
+    left alone and reads as connected."""
+    cfg = _cfg()
+    if not cfg.get('access_token'):
+        return True if find_nile_library() else False
+    if time.time() <= cfg.get('expires_at', 0) - 60:
+        return True
+    if not cfg.get('refresh_token'):
+        return False
+    try:
+        resp = requests.post(f'{AMAZON_API}/auth/token', json={
+            'source_token': cfg['refresh_token'], 'source_token_type': 'refresh_token',
+            'requested_token_type': 'access_token',
+            'app_name': APP_NAME, 'app_version': APP_VERSION,
+        }, timeout=20)
+    except requests.RequestException:
+        return None
+    if resp.ok:
+        cfg['access_token'] = resp.json()['access_token']
+        cfg['expires_at']   = int(time.time()) + int(resp.json().get('expires_in', 3600))
+        _save_cfg(cfg)
+        return True
+    return False if resp.status_code in (400, 401, 403) else None
+
+
 def disconnect():
     cfg = load_config() or {}
     cfg.pop('amazon_games', None)

@@ -1,7 +1,7 @@
 {
     "id": "amazon_games",
     "name": "Amazon Games",
-    "version": "1.1.1",
+    "version": "2026.10.1",
     "min_core_version": "1.10.2",
     "platform": "amazon_games",
     "author": "RobbyRatpoison",
@@ -16,5 +16,9 @@
     },
     "notes": {
         "linux": "Auth rewritten around Amazon's real device-registration OAuth2 flow (matching the Nile/Heroic client's protocol); confirmed live end-to-end (real account connect, token issuance, GetEntitlements call) but not yet against an account with actual owned games. Install/launch/uninstall are now a from-scratch reimplementation of Amazon's real download protocol (GetGameDownload -> signed/LZMA-compressed SDS manifest -> content-hash-addressed downloads -> fuel.json launch descriptor, run via Proton/Wine with the Fuel SDK env vars real games expect) -- no dependency on the Nile CLI being installed, matching how auth/sync were built. Nile's local library.json is still read as an optional zero-auth sync source when present. Entirely unverified end to end (no owned Amazon game to test against) -- please report back if you own games here."
+    },
+    "release_note": {
+        "version": "2026.10.1",
+        "text": "The plugin card shows Connect again when Amazon rejects your saved login."
     }
 }
